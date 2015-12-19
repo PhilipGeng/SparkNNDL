@@ -1,9 +1,7 @@
 package functionalModel
 
 
-class mlnn (val input:Int, val hid:Array[Int], val output:Int, val eta: Double=0.25, val momentum: Double=0.9){
-
-  val r = scala.util.Random
+class mlnn (val input:Int, val hid:Array[Int], val output:Int, val eta: Double=0.25, val momentum: Double=0.9) extends Serializable{
 
   var inputlayer = new Array[Double](input+1);
   var hiddenlayer :Array[Array[Double]] = hid.map(x=>new Array[Double](x+1))
@@ -18,7 +16,7 @@ class mlnn (val input:Int, val hid:Array[Int], val output:Int, val eta: Double=0
   var prevweight: Array[Array[Array[Double]]] = new Array(layers.length-1);
 
   for(i<- 0 to layers.length-2){
-    weight(i) = Array.fill(layers(i).length,layers(i+1).length){r.nextDouble()*2-1d}
+    weight(i) = Array.fill(layers(i).length,layers(i+1).length){scala.util.Random.nextDouble()*2-1d}
     prevweight(i) = Array.fill(layers(i).length,layers(i+1).length){0d}
   }
 
@@ -35,16 +33,22 @@ class mlnn (val input:Int, val hid:Array[Int], val output:Int, val eta: Double=0
   def predict(features:Array[Double]): Array[Double] ={
     loadData(features);
     forwardProp();
-    layers(layers.length-1);
+    layers(layers.length-1).drop(1);
   }
 
   def loadData(features:Array[Double]): Unit ={
-    layers(0) = features;
+    if(layers(0).length!=features.length+1)
+      println("load data error: dimension not fit")
+    layers(0) = Array(1d)++features;
   }
 
   def loadData(features:Array[Double], labels:Array[Double]): Unit ={
-    layers(0) = features;
-    reallabel = labels;
+    if(layers(0).length!=features.length+1)
+      println("error feature")
+    if(reallabel.length!=labels.length+1)
+      println("error label")
+    layers(0) = Array(1d)++features;
+    reallabel = Array(0d)++labels;
   }
 
   def forwardProp(): Unit ={

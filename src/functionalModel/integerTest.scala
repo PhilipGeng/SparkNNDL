@@ -13,7 +13,7 @@ object integerTest {
   def main(args:Array[String]): Unit = {
     val rd = scala.util.Random;
     //var nn: neuralNetwork = new neuralNetwork(32,15, 4);
-    var nn: mlnn = new mlnn(32,Array(2),4)
+    var nn: mlnn = new mlnn(32,Array(30),4)
     var list = new Array[(Array[Double], Array[Double])](1000);
 
 
@@ -33,10 +33,10 @@ object integerTest {
       var r = nn.predict(n)
       var str1 = "negative";
       var str2 = "even";
-      if (r(0) > r(1)) str1 = "positive";
-      if (r(2) > r(3)) str2 = "odd";
-      if(nm*(r(0)-r(1))>0){
-        if(r(2)>r(3)){
+      if (r(1) > r(2)) str1 = "positive";
+      if (r(3) > r(4)) str2 = "odd";
+      if(nm*(r(1)-r(2))>0){
+        if(r(3)>r(4)){
           if(Math.abs(nm)%2==1)right+=1
           else println("err1: "+nm+str1+str2)
         }
