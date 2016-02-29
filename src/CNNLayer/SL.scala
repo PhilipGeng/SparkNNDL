@@ -38,6 +38,7 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
    */
   override def forward(input_arr:RDD[Array[DM[Double]]]): RDD[Array[DM[Double]]] ={
     input = input_arr //save input
+    input.cache()
     output = input.map{arr=> //rdd, each iteration
       val rm_dim:Int = arr(0).cols/dim_neighbor //output matrix dimension
       arr.zip(weight.zip(bias)).map{mat=> //(input:DM,(weight:Double,bias:Double))
@@ -50,7 +51,7 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
           sigmoid(mean*w+b)
         }
       }
-    }
+    }.cache()
     output
   }
 
@@ -77,6 +78,7 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
    */
   override def calErr(nextLayer:CL): Unit ={
     delta = calErrBeforeCl(nextLayer)
+    delta.cache()
   }
   override def calErrLocal(nextLayer:CL): Unit ={
     deltaLocal = calErrBeforeClLocal(nextLayer)
@@ -172,5 +174,14 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
       bias(i) = bias(i)+adjb_part*eta
     }
   }
-
+  override def clearCache(): Unit ={
+    input.unpersist()
+    output.unpersist()
+    delta.unpersist()
+  }
+  override def filterInput(inputFilter:RDD[Int]): Unit = {
+    //only keep wrong results
+    input = input.zip(inputFilter).filter(_._2 == 0).map(_._1)
+    input.coalesce(numPartition,true)
+  }
 }

@@ -10,6 +10,8 @@ import org.apache.spark.rdd.RDD
 
 abstract class layer extends Serializable {
   /**interfaces for cluster mode*/
+  var numPartition: Int = 2
+
   def forward(input_arr:RDD[Array[DM[Double]]]):RDD[Array[DM[Double]]]
   def calErr(nextLayer:SL): Unit = {}
   def calErr(nextLayer:CL): Unit = {}
@@ -17,6 +19,12 @@ abstract class layer extends Serializable {
   def calErr(nextLayer:OL): Unit = {}
   def calErr(target: RDD[DV[Double]]): Unit = {}
   def adjWeight(): Unit = {}
+  def clearCache(): Unit ={}
+  def filterInput(inputFilter:RDD[Int]): Unit = {}
+
+  def setNumPartition(par:Int): Unit ={
+    numPartition = par
+  }
   /**interfaces for local mode*/
   def forwardLocal(input_arr:Array[DM[Double]]):Array[DM[Double]]
   def calErrLocal(nextLayer:SL): Unit = {}

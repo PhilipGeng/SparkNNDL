@@ -35,10 +35,11 @@ class FL (val num_in:Int, val num_out:Int, var eta:Double=0.5) extends layer{
    */
   override def forward(in_vec:RDD[Array[DM[Double]]]): RDD[Array[DM[Double]]] ={
     //transform Array[DM[Double]] => DV[Double]
-    input = in_vec.map(flattenOutput(_))
+    input = in_vec.map(flattenOutput(_)).cache()
     //dot product to get output
     output = input.map { vec=> sigmoid((vec.t * weight).t + bias)}
     //format output DV[Double] => Array[DM[Double]]
+    output.cache()
     output.map(formatOutput(_))
   }
 
@@ -61,7 +62,7 @@ class FL (val num_in:Int, val num_out:Int, var eta:Double=0.5) extends layer{
       val outputVec:DV[Double] = vec._2
       val sum:DV[Double] = nextWeight*deltaVec
       outputVec:*(outputVec:-1d):*sum:*(-1d)
-    }
+    }.cache()
   }
   def calErrBeforeFlLocal(nextDelta:DV[Double], nextWeight:DM[Double]): Unit ={
     val sum:DV[Double]= nextWeight*nextDelta
@@ -101,4 +102,13 @@ class FL (val num_in:Int, val num_out:Int, var eta:Double=0.5) extends layer{
     val adjb:DV[Double] = deltaLocal:*eta
     bias = bias+adjb
   }
+  override def clearCache(): Unit ={
+    input.unpersist()
+    output.unpersist()
+    delta.unpersist()
+  }
+  override def filterInput(inputFilter:RDD[Int]): Unit = {
+    //only keep wrong results
+    input = input.zip(inputFilter).filter(_._2 == 0).map(_._1)
+    input.coalesce(numPartition,true)  }
 }

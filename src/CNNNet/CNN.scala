@@ -23,22 +23,41 @@ class CNN extends Serializable{
   var f6:FL = new FL(120,84)
   var o7:OL = new OL(84,10)
   var network = Array(c1,s2,c3,s4,c5,f6,o7)
-  var errarr: Array[Double] = Array()
+  var localerr: Double = 0
+  var updateWhenWrong: Boolean = false
+  var numPartition: Int = 2
+
   /**
    * single node mode
    * @param input image
    * @param target label
    */
-  def train(input:RDD[Array[DM[Double]]], target:RDD[DV[Double]]): Unit ={
-    val fpres:RDD[DV[Double]] = classify(input)
-    val a:Array[DV[Double]] = fpres.collect()
-    val b:Array[DV[Double]] = target.collect()
-    val err:DV[Double] = a(0)-b(0)
-    val Error:Double = sum(err:*err)
+  def train(input:RDD[DM[Double]], target:RDD[DV[Double]]): Unit ={
+    var target_filtered:RDD[DV[Double]] = target
+    val fpRes:RDD[DV[Double]] = fpRDD(input)
+    localerr = fpRes.zip(target).map(v=>sum((v._1-v._2).map(x=>x*x))).collect().sum
+    if(updateWhenWrong){
+/*      val fpFilter: RDD[Int] = fpRes.zip(target).map{ite=>
+        if(judgeRes(ite._1,ite._2))
+          1 //result is correct
+        else
+          0 //result is wrong
+      }.cache()
+      layersFilterInput(fpFilter)
+      //only keep wrong results
+      target_filtered = target.zip(fpFilter).filter(_._2 == 0).map(_._1).repartition(numPartition)
+      val number: Double = target_filtered.count().toDouble/fpFilter.count().toDouble
+      println(" -------------------------------  totally updated: "+number+"-----------------------")
+      fpFilter.unpersist()*/
+      target_filtered = fpRes.zip(target).map{ite=>
+        if(judgeRes(ite._1,ite._2))
+          ite._1 //if classification correct, set target = classified, so that err = 0
+        else
+          ite._2 //if classification wrong, set target = target, err!=0
+      }
+    }
 
-    errarr = errarr++Array(Error)
-
-    o7.calErr(target)
+    o7.calErr(target_filtered)
     f6.calErr(o7)
     c5.calErr(f6)
     s4.calErr(c5)
@@ -54,35 +73,49 @@ class CNN extends Serializable{
     f6.adjWeight()
     o7.adjWeight()
 
+    clearAllCache()
+
   }
 
-  def train(input:Array[DM[Double]], target:DV[Double]): Double ={
-    val fpres:DV[Double] = classify(input)
-    val err:DV[Double] = fpres-target
+  def train(input:DM[Double], target:DV[Double]): Unit ={
+    val fpRes:DV[Double] = classify(input)
+    //calculate error
+    val err:DV[Double] = fpRes-target
     val Error:Double = sum(err:*err)
+    localerr = Error
+    if(!(updateWhenWrong && judgeRes(fpRes,target))){
+      o7.calErrLocal(target)
+      f6.calErrLocal(o7)
+      c5.calErrLocal(f6)
+      s4.calErrLocal(c5)
+      c3.calErrLocal(s4)
+      s2.calErrLocal(c3)
+      c1.calErrLocal(s2)
 
-    println(Error)
-
-    o7.calErrLocal(target)
-    f6.calErrLocal(o7)
-    c5.calErrLocal(f6)
-    s4.calErrLocal(c5)
-    c3.calErrLocal(s4)
-    s2.calErrLocal(c3)
-    c1.calErrLocal(s2)
-
-    c1.adjWeightLocal()
-    s2.adjWeightLocal()
-    c3.adjWeightLocal()
-    s4.adjWeightLocal()
-    c5.adjWeightLocal()
-    f6.adjWeightLocal()
-    o7.adjWeightLocal()
-    Error
+      c1.adjWeightLocal()
+      s2.adjWeightLocal()
+      c3.adjWeightLocal()
+      s4.adjWeightLocal()
+      c5.adjWeightLocal()
+      f6.adjWeightLocal()
+      o7.adjWeightLocal()
+    }
   }
 
-  def classify(input:RDD[Array[DM[Double]]]):RDD[DV[Double]] = {
-    val c1res:RDD[Array[DM[Double]]] = c1.forward(input)
+  def judgeRes(fpRes:DV[Double],target:DV[Double]): Boolean ={
+    var res: Boolean = false
+    for(i<-0 to target.length-1){
+      if(target(i) == 1){
+          if(fpRes.max == fpRes(i))
+            res = true
+      }
+    }
+    res
+  }
+
+  def fpRDD(input:RDD[DM[Double]]):RDD[DV[Double]] = {
+    val in: RDD[Array[DM[Double]]] = input.map(Array(_))
+    val c1res:RDD[Array[DM[Double]]] = c1.forward(in)
     val s2res:RDD[Array[DM[Double]]] = s2.forward(c1res)
     val c3res:RDD[Array[DM[Double]]] = c3.forward(s2res)
     val s4res:RDD[Array[DM[Double]]] = s4.forward(c3res)
@@ -91,9 +124,15 @@ class CNN extends Serializable{
     val o7res:RDD[Array[DM[Double]]] = o7.forward(f6res)
     o7res.map(x=>o7.flattenOutput(x))
   }
+  def classify(input:RDD[DM[Double]]):RDD[DV[Double]] = {
+    val res = fpRDD(input)
+    clearAllCache()
+    res
+  }
 
-  def classify(input:Array[DM[Double]]):DV[Double] = {
-    val c1res:Array[DM[Double]] = c1.forwardLocal(input)
+  def classify(input:DM[Double]):DV[Double] = {
+    val in: Array[DM[Double]] = Array(input)
+    val c1res:Array[DM[Double]] = c1.forwardLocal(in)
     val s2res:Array[DM[Double]] = s2.forwardLocal(c1res)
     val c3res:Array[DM[Double]] = c3.forwardLocal(s2res)
     val s4res:Array[DM[Double]] = s4.forwardLocal(c3res)
@@ -113,5 +152,38 @@ class CNN extends Serializable{
     o7.seteta(eta)
   }
 
-  def getErr(): Array[Double] = errarr
+  def layersFilterInput(fpFilter:RDD[Int]): Unit ={
+    c1.filterInput(fpFilter)
+    s2.filterInput(fpFilter)
+    c3.filterInput(fpFilter)
+    s4.filterInput(fpFilter)
+    c5.filterInput(fpFilter)
+    f6.filterInput(fpFilter)
+    o7.filterInput(fpFilter)
+  }
+
+  def clearAllCache(): Unit ={
+    c1.clearCache()
+    s2.clearCache()
+    c3.clearCache()
+    s4.clearCache()
+    c5.clearCache()
+    f6.clearCache()
+    o7.clearCache()
+  }
+
+  def setUpdateWhenWrong(a:Boolean): Unit ={
+    updateWhenWrong = a
+  }
+
+  def setNumPartition(par:Int): Unit ={
+    numPartition = par
+    c1.setNumPartition(numPartition)
+    s2.setNumPartition(numPartition)
+    c3.setNumPartition(numPartition)
+    s4.setNumPartition(numPartition)
+    c5.setNumPartition(numPartition)
+    f6.setNumPartition(numPartition)
+    o7.setNumPartition(numPartition)
+  }
 }

@@ -32,13 +32,14 @@ class CL(val numfm:Int, val dim_conv:Int, var eta:Double=0.5) extends layer {
   var inputLocal: Array[DM[Double]] = _
   var deltaLocal: Array[DM[Double]] = _
   var outputLocal: Array[DM[Double]]= _
+
+  def seteta(e:Double): Unit ={
+    this.eta = e
+  }
   /**
    * set map relationship between input maps with output feature maps
    * @param map input image/map of the ith output feature map
    */
-  def seteta(e:Double): Unit ={
-    this.eta = e
-  }
 
   def set_fm_input_map(map:Array[Array[Int]]): Unit ={
     fm_input_map = map
@@ -69,6 +70,7 @@ class CL(val numfm:Int, val dim_conv:Int, var eta:Double=0.5) extends layer {
 
   override def forward(input: RDD[Array[DM[Double]]]): RDD[Array[DM[Double]]] = {
     this.input = input
+    this.input.cache()
     output = input.map{rddarr=> //each rdd
       kernel.zip(bias).zip(fm_input_map).map{fm=> //each fm
         val k: Array[DM[Double]] = fm._1._1 //kernel
@@ -81,6 +83,7 @@ class CL(val numfm:Int, val dim_conv:Int, var eta:Double=0.5) extends layer {
         }.reduce((x,y)=>x+y).map(x=>sigmoid(x+b)) //convoltuion end, sum up with bias and sigmoid
       }//fm end
     }//rdd end
+    output.cache()
     output
   }
   /**
@@ -95,11 +98,13 @@ class CL(val numfm:Int, val dim_conv:Int, var eta:Double=0.5) extends layer {
       val k: Array[DM[Double]] = fm._1._1 //kernel
       val b: Double = fm._1._2 //bias
       val i: Array[Int] = fm._2 //input map
-      k.zip(i).map{ker=> //each convoltuion
+      val c = k.zip(i).map{ker=> //each convoltuion
         val convKernel: DM[Double] = ker._1 //kernel
         val index: Int = ker._2 //index of inputmap
         convolveDM(inputLocal(index),convKernel) //get inputmap and convolve
-      }.reduce((x,y)=>x+y).map(x=>sigmoid(x+b)) //end convolution, sum up with bias and sigmoid
+      }.reduce((x,y)=>x+y)
+      //val d = c.map(x=>sigmoid(x+b)) //end convolution, sum up with bias and sigmoid
+      sigmoid(c:+b)
     }//end fm
     outputLocal
   }
@@ -124,6 +129,7 @@ class CL(val numfm:Int, val dim_conv:Int, var eta:Double=0.5) extends layer {
       val e_sum:DV[Double] = elem._2
       formatOutput(e_o :* (e_o:-1d) :* e_sum :* -1d)
     }//end rdd
+    delta.cache()
     delta
   }
 
@@ -163,6 +169,7 @@ class CL(val numfm:Int, val dim_conv:Int, var eta:Double=0.5) extends layer {
         o:*(o:-1d):*(-1d):*d
       }
     }
+    delta.cache()
     delta
   }
 
@@ -280,4 +287,17 @@ class CL(val numfm:Int, val dim_conv:Int, var eta:Double=0.5) extends layer {
         kernel(i)(j) = kernel(i)(j) + adjw(j):*eta
     }
   }
+
+  override def clearCache(): Unit ={
+    input.unpersist()
+    output.unpersist()
+    delta.unpersist()
+  }
+
+  override def filterInput(inputFilter:RDD[Int]): Unit = {
+    //only keep wrong results
+    input = input.zip(inputFilter).filter(_._2 == 0).map(_._1)
+    input.coalesce(numPartition,true)
+  }
+
 }

@@ -25,10 +25,11 @@ class OL (override val num_in:Int, override val num_out:Int, etao:Double=0.5) ex
       val t:DV[Double] = vec._1
       val o:DV[Double] = vec._2
       o:*(o:-1d):*(o-t)
-    }
+    }.cache()
   }
 
   override def calErrLocal(target: DV[Double]): Unit ={
     deltaLocal = outputLocal :* (outputLocal :- 1d) :* (outputLocal :- target)
   }
+
 }
