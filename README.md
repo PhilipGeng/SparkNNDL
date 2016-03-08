@@ -1,6 +1,7 @@
 # CNN on Spark
 This is a generalised CNN(convolutional neural network) model implemented on Spark-scala. The model is abstracted down to layer models which contains models like CL(Convolutional layer), SL(subsampling layer), FL(fully-connected layer) and OL(Output layer). You can build up your own network architecture according to your need.
 <h5>package structure:</h5>
+<pre>
 ./model: successfully trained LeNet5 with 5 iteration training and tested on MNIST dataset. Error rate < 2%<br>
 ./src: source code of the package:<br>
 ----+CNNLayer<br>
@@ -27,12 +28,12 @@ This is a generalised CNN(convolutional neural network) model implemented on Spa
     ----+mlp<br>
 	----+mlpclassify.scala<br>
 	----+mlptrain.scala<br>
-
+</pre>
 <h5>Use language:</h5>
 Spark (scala api)<br>
 <h5>Based on theory:</h5>
 Convolutional neural network trained with back propagation algorithm using gradient descent (parameter: learning rate and momentum).<br>
-Global training setting: batch training size, training mode(update weight when classification is wrong or not?)<br>
+Global training setting: batch training size, training mode(update weight when classification is wrong or not?)
 <h5>Supervised by:</h5>
 Dr.Eric Lo, Hong Kong PolyU
 
