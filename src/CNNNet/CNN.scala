@@ -35,20 +35,8 @@ class CNN extends Serializable{
   def train(input:RDD[DM[Double]], target:RDD[DV[Double]]): Unit ={
     var target_filtered:RDD[DV[Double]] = target
     val fpRes:RDD[DV[Double]] = fpRDD(input)
-    localerr = fpRes.zip(target).map(v=>sum((v._1-v._2).map(x=>x*x))).collect().sum
+    localerr = fpRes.zip(target).map(v=>o7.loss(v._1,v._2)).collect().sum
     if(updateWhenWrong){
-/*      val fpFilter: RDD[Int] = fpRes.zip(target).map{ite=>
-        if(judgeRes(ite._1,ite._2))
-          1 //result is correct
-        else
-          0 //result is wrong
-      }.cache()
-      layersFilterInput(fpFilter)
-      //only keep wrong results
-      target_filtered = target.zip(fpFilter).filter(_._2 == 0).map(_._1).repartition(numPartition)
-      val number: Double = target_filtered.count().toDouble/fpFilter.count().toDouble
-      println(" -------------------------------  totally updated: "+number+"-----------------------")
-      fpFilter.unpersist()*/
       target_filtered = fpRes.zip(target).map{ite=>
         if(judgeRes(ite._1,ite._2))
           ite._1 //if classification correct, set target = classified, so that err = 0
@@ -80,9 +68,7 @@ class CNN extends Serializable{
   def train(input:DM[Double], target:DV[Double]): Unit ={
     val fpRes:DV[Double] = classify(input)
     //calculate error
-    val err:DV[Double] = fpRes-target
-    val Error:Double = sum(err:*err)
-    localerr = Error
+    localerr = o7.loss(fpRes,target)
     if(!(updateWhenWrong && judgeRes(fpRes,target))){
       o7.calErrLocal(target)
       f6.calErrLocal(o7)
@@ -152,16 +138,6 @@ class CNN extends Serializable{
     o7.seteta(eta)
   }
 
-  def layersFilterInput(fpFilter:RDD[Int]): Unit ={
-    c1.filterInput(fpFilter)
-    s2.filterInput(fpFilter)
-    c3.filterInput(fpFilter)
-    s4.filterInput(fpFilter)
-    c5.filterInput(fpFilter)
-    f6.filterInput(fpFilter)
-    o7.filterInput(fpFilter)
-  }
-
   def clearAllCache(): Unit ={
     c1.clearCache()
     s2.clearCache()
@@ -186,4 +162,5 @@ class CNN extends Serializable{
     f6.setNumPartition(numPartition)
     o7.setNumPartition(numPartition)
   }
+
 }

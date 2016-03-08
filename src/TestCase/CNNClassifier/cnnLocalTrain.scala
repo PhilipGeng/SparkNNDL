@@ -1,9 +1,9 @@
 package TestCase.CNNClassifier
 
-import java.io.{FileOutputStream, ObjectOutputStream}
+import java.io.{FileInputStream, ObjectInputStream, FileOutputStream, ObjectOutputStream}
 
 import CNNNet.CNN
-import breeze.linalg.{DenseMatrix => DM, DenseVector => DV}
+import breeze.linalg.{DenseMatrix => DM, DenseVector => DV, sum}
 import org.apache.spark.SparkContext
 
 /**
@@ -22,18 +22,19 @@ object cnnLocalTrain {
     val sc = new SparkContext("local", "cnnLocalTrain")
     //local training
     val local_ite: Int = 5
-    val local_eta: Array[Double] = Array(1,1,1,1,1)
+    //val local_eta: Array[Double] = Array(1d,1d,0.9,0.9,0.8)
+    val local_eta: Array[Double] = Array(0.0005,0.0005,0.0002,0.0002,0.0002)
     require(local_ite==local_eta.length)
     val start = System.nanoTime()
     var cnt = 0
-
-/*  // load model from file
-    val modelPath = "model/CNNlocal6.out"
+    var correct = 0
+  // load model from file
+    val modelPath = "model/CNNlocal0.out"
     val fis1 = new FileInputStream(modelPath)
     val ois1 = new ObjectInputStream(fis1)
-
     val net:CNN = ois1.readObject.asInstanceOf[CNN]
-*/
+
+    net.setUpdateWhenWrong(false)
     //local training
     fos = new FileOutputStream("CNNtrainstart.out")
     oos = new ObjectOutputStream(fos)
@@ -52,7 +53,7 @@ object cnnLocalTrain {
           val target:DV[Double] = new DV(labarr)
           cnt = cnt+1
           net.train(input,target)
-          println("sample:"+cnt+"err:"+net.localerr)
+          println("sample:"+cnt+"  err:"+net.localerr)
         }
       }
       fos = new FileOutputStream("CNNlocal"+k+".out")

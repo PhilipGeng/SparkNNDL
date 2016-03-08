@@ -22,7 +22,7 @@ object cnnBatchTrain {
     val sc = new SparkContext(conf)
     //cluster training
     val cluster_ite: Int = 5
-    val cluster_eta: Array[Double] = Array(0.5,0.5,0.5,0.5,0.5)
+    val cluster_eta: Array[Double] = Array(0.1,0.07,0.05,0.05,0.05)
     val cluster_updateWhenWrong: Array[Boolean] = Array(false,false,false,true,true)
     require(cluster_ite == cluster_eta.length)
     require(cluster_ite == cluster_updateWhenWrong.length)

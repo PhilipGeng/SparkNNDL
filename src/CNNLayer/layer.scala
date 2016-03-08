@@ -9,8 +9,12 @@ import breeze.linalg.{DenseMatrix=>DM,DenseVector=>DV,sum}
 import org.apache.spark.rdd.RDD
 
 abstract class layer extends Serializable {
+  /** default values */
+  var eta: Double = 0.01
+  var momentum: Double = 0.9
   /**interfaces for cluster mode*/
   var numPartition: Int = 2
+  def setNumPartition(par:Int): Unit ={numPartition = par}
 
   def forward(input_arr:RDD[Array[DM[Double]]]):RDD[Array[DM[Double]]]
   def calErr(nextLayer:SL): Unit = {}
@@ -20,11 +24,8 @@ abstract class layer extends Serializable {
   def calErr(target: RDD[DV[Double]]): Unit = {}
   def adjWeight(): Unit = {}
   def clearCache(): Unit ={}
-  def filterInput(inputFilter:RDD[Int]): Unit = {}
 
-  def setNumPartition(par:Int): Unit ={
-    numPartition = par
-  }
+
   /**interfaces for local mode*/
   def forwardLocal(input_arr:Array[DM[Double]]):Array[DM[Double]]
   def calErrLocal(nextLayer:SL): Unit = {}
@@ -34,6 +35,17 @@ abstract class layer extends Serializable {
   def calErrLocal(target: DV[Double]): Unit = {}
   def adjWeightLocal(): Unit = {}
 
+  /**
+   * setter function for learning rate
+   * @param e
+   */
+  def seteta(e:Double) = {
+    this.eta = e
+  }
+
+  def setMomentum(m:Double)={
+    this.momentum = m
+  }
   /**
    * format output for intra-class calculation
    * @param output: Array of DM
@@ -128,4 +140,5 @@ abstract class layer extends Serializable {
   def unzip(s: RDD[Array[DM[Double]]], numOfCol: Int): Array[RDD[DM[Double]]] = {
     (0 until numOfCol).toArray.map{index=>s.map{arr=>arr(index)}}
   }
+
 }

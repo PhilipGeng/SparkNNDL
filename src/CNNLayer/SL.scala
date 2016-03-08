@@ -6,16 +6,15 @@ package CNNLayer
  * This is the sub-sampling layer in CNN
  */
 import breeze.linalg.{DenseVector=>DV, DenseMatrix=>DM, sum}
-import breeze.numerics.sigmoid
 import org.apache.spark.rdd.RDD
+import breeze.numerics.{atan, tanh, sigmoid}
 
 /**
  *
  * @param numfm number of featuremaps
  * @param dim_neighbor width/height of the subsampling block
- * @param eta learning rate
  */
-class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends layer{
+class SL (val numfm: Int, val dim_neighbor:Int) extends layer{
   //weight and bias
   var weight:Array[Double] = Array.fill(numfm){scala.util.Random.nextDouble()*2-1d}
   var bias:Array[Double] = Array.fill(numfm){scala.util.Random.nextDouble()*2-1d}
@@ -27,10 +26,9 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
   var outputLocal:Array[DM[Double]]=_
   var deltaLocal:Array[DM[Double]]=_
   var inputLocal:Array[DM[Double]]=_
+  var wadj:Array[Double] = Array.fill(numfm){0d}
+  var badj:Array[Double] = Array.fill(numfm){0d}
 
-  def seteta(e:Double): Unit ={
-    this.eta = e
-  }
   /**
    * forward
    * @param input_arr input image
@@ -39,37 +37,23 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
   override def forward(input_arr:RDD[Array[DM[Double]]]): RDD[Array[DM[Double]]] ={
     input = input_arr //save input
     input.cache()
-    output = input.map{arr=> //rdd, each iteration
-      val rm_dim:Int = arr(0).cols/dim_neighbor //output matrix dimension
-      arr.zip(weight.zip(bias)).map{mat=> //(input:DM,(weight:Double,bias:Double))
-        val dm:DM[Double] = mat._1 //matrix
-        val w:Double = mat._2._1 //weight
-        val b:Double = mat._2._2 //bias
-        DM.tabulate(rm_dim,rm_dim){case (i,j)=> //indices in output matrix
-          //mean subsampling
-          val mean:Double = sum(dm(i*dim_neighbor to (i+1)*dim_neighbor-1,j*dim_neighbor to (j+1)*dim_neighbor-1))/(dim_neighbor*dim_neighbor)
-          sigmoid(mean*w+b)
-        }
-      }
-    }.cache()
+    output = input.map{arr=>forwardLocal(arr)}.cache()
     output
   }
 
   override def forwardLocal(input_arr:Array[DM[Double]]): Array[DM[Double]] ={
     inputLocal = input_arr
-    val rm_dim:Int = inputLocal(0).cols/dim_neighbor
-    val rm:Array[DM[Double]] = Array.fill(inputLocal.length){DM.zeros(rm_dim,rm_dim)}
-    for(k<-inputLocal.indices){
-      val im = inputLocal(k)
-      for(i<- 0 to rm_dim-1){
-        for(j<- 0 to rm_dim-1){
-          //squeeze a dim_neighbor*dim_neighbor subsampling block into one number by getting the mean
-          val summation:Double = sum(im(i*dim_neighbor to (i+1)*dim_neighbor-1,j*dim_neighbor to (j+1)*dim_neighbor-1))
-          rm(k)(i,j) = sigmoid(summation*weight(k)+bias(k))
-        }
+    val rm_dim:Int = inputLocal(0).cols/dim_neighbor //output matrix dimension
+    outputLocal = inputLocal.zip(weight.zip(bias)).map{mat=> //(input:DM,(weight:Double,bias:Double))
+      val dm:DM[Double] = mat._1 //matrix
+      val w:Double = mat._2._1 //weight
+      val b:Double = mat._2._2 //bias
+      DM.tabulate(rm_dim,rm_dim){case (i,j)=> //indices in output matrix
+        //mean subsampling
+        val mean:Double = sum(dm(i*dim_neighbor to (i+1)*dim_neighbor-1,j*dim_neighbor to (j+1)*dim_neighbor-1))/(dim_neighbor*dim_neighbor)
+        sigmoid(mean*w+b)
       }
     }
-    outputLocal = rm
     outputLocal
   }
   /**
@@ -77,15 +61,21 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
    * @param nextLayer
    */
   override def calErr(nextLayer:CL): Unit ={
-    delta = calErrBeforeCl(nextLayer)
-    delta.cache()
-  }
-  override def calErrLocal(nextLayer:CL): Unit ={
-    deltaLocal = calErrBeforeClLocal(nextLayer)
-  }
+    val CLDelta = nextLayer.delta
+    val CLDim = nextLayer.dim_conv
+    val CLOutIndex = nextLayer.outputIndex
+    val CLWeight = nextLayer.kernel
+    val propErr:RDD[Array[DM[Double]]] = CLDelta.map{rddarr=>
+      CLOutIndex.map{sm=>
+        sm.map { cm =>
+          val d = rddarr(cm._1)
+          val k = rot180(CLWeight(cm._1)(cm._2))
+          val expand_d:DM[Double] = padDM(d,CLDim-1)
+          convolveDM(expand_d,k)
+        }.reduce((a,b)=>a+b)
+      }
+    }
 
-  def calErrBeforeCl(nextLayer:CL): RDD[Array[DM[Double]]] ={
-    val propErr:RDD[Array[DM[Double]]] = nextLayer.calErrForSl() //receive proped err
     delta = propErr.zip(output).map{arr=> //each arr
       arr._1.zip(arr._2).map{Mat=> //zipped matrix
         val d:DM[Double] = Mat._1 //delta
@@ -93,50 +83,36 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
         o:*(o:-1d):*(-1d):*d //calculate as matrix
       }
     }
-    delta
+    delta.cache()
   }
-  def calErrBeforeClLocal(nextLayer:CL): Array[DM[Double]] ={
-    val SLDelta = nextLayer.calErrForSlLocal()
-    deltaLocal = outputLocal.zip(SLDelta).map{x=>
+
+  override def calErrLocal(nextLayer:CL): Unit ={
+    val CLDeltaLocal = nextLayer.deltaLocal
+    val CLDim = nextLayer.dim_conv
+    val CLOutIndex = nextLayer.outputIndex
+    val CLWeight = nextLayer.kernel
+    val propErr: Array[DM[Double]] = CLOutIndex.map{sm=> //each SL map
+      sm.map { cm => //corresponding CL map
+        val d = CLDeltaLocal(cm._1) //get CL map delta
+        val k = rot180(CLWeight(cm._1)(cm._2)) //rot 180 of conv kernel
+        val expand_d:DM[Double] = padDM(d,CLDim-1)
+        convolveDM(expand_d,k)
+      }.reduce((a,b)=>a+b)
+    }
+
+    deltaLocal = outputLocal.zip(propErr).map{x=>
       val o = x._1
       val d = x._2
       o:*(o:-1d):*(-1d):*d
     }
-    deltaLocal
   }
-
-  /**
-   * calculate Err for CL
-   * @return
-   */
-  def calErrForCl(): RDD[Array[DM[Double]]] ={
-    val CLDelta: RDD[Array[DM[Double]]] = delta.map{arr=> //each arr
-      arr.zip(weight).map{Mat=> //each mat zip with weight
-        val d:DM[Double] = Mat._1 //delta mat
-        val w:Double = Mat._2 //weight
-        expandDM(d,dim_neighbor):*w
-      }
-    }
-    CLDelta
-  }
-
-  def calErrForClLocal(): Array[DM[Double]] ={
-    val CLDelta: Array[DM[Double]] = deltaLocal.zip(weight).map{Mat=>
-      val d:DM[Double] = Mat._1 //delta mat
-      val w:Double = Mat._2 //weight
-      expandDM(d,dim_neighbor):*w
-    }
-    CLDelta
-  }
-
-
 
   /**
    * calculate weight adjustments and queue up in the list
    * cluster mode, for batch update
    */
   override def adjWeight(): Unit ={
-    val adj:RDD[Array[(Double, Double)]] = delta.zip(input) map { arr => // each arr
+    val adj:RDD[Array[(Double, Double)]] = delta.zip(input).map{arr => // each arr
       arr._1.zip(arr._2).map { mat=> //each delta mat zip with input mat
         val d:DM[Double] = mat._1 //delta
         val i:DM[Double] = mat._2 //input
@@ -168,10 +144,10 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
           adjb_part = adjb_part + deltaLocal(i)(m,n)
         }
       }
-      adjw(i) = adjw_part*eta
-      adjb(i) = adjb_part*eta
-      weight(i) = weight(i)+adjw_part*eta
-      bias(i) = bias(i)+adjb_part*eta
+      wadj(i) = adjw_part*eta + wadj(i)*momentum
+      badj(i) = adjb_part*eta + badj(i)*momentum
+      weight(i) = weight(i) + wadj(i)
+      bias(i) = bias(i) + badj(i)
     }
   }
   override def clearCache(): Unit ={
@@ -179,9 +155,5 @@ class SL (val numfm: Int, val dim_neighbor:Int, var eta:Double=0.5) extends laye
     output.unpersist()
     delta.unpersist()
   }
-  override def filterInput(inputFilter:RDD[Int]): Unit = {
-    //only keep wrong results
-    input = input.zip(inputFilter).filter(_._2 == 0).map(_._1)
-    input.coalesce(numPartition,true)
-  }
+
 }

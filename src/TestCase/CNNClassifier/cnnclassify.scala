@@ -13,7 +13,7 @@ import org.apache.spark.SparkContext
 object cnnclassify {
   def main(args:Array[String]): Unit ={
     //load model
-    val modelPath = "CNNlocal1.out"
+    val modelPath = "CNNlocal0.out"
     val fis1 = new FileInputStream(modelPath)
     val ois1 = new ObjectInputStream(fis1)
     val net:CNN = ois1.readObject.asInstanceOf[CNN]

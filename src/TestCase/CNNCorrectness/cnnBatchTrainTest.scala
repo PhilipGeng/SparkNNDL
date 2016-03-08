@@ -38,7 +38,7 @@ object cnnBatchTrainTest {
       net.setEta(cluster_eta(k))
       for(i<- 0 to 1){
         println("cluster training: ite "+k+" sample "+i+"0000")
-        val trstr: RDD[(DM[Double],DV[Double])] = sc.parallelize(sc.textFile(trainfile(i)).take(15)).map{rddline=>
+        val trstr: RDD[(DM[Double],DV[Double])] = sc.parallelize(sc.textFile(trainfile(i)).take(150)).map{rddline=>
           val arr: Array[String] = rddline.split(",")
           val label: Int = arr(0).toInt
           val data = arr.drop(1).map(_.toDouble/255)

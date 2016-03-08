@@ -6,16 +6,15 @@ package CNNLayer
  * This fully connected layer in CNN (multi-layer perceptron)
  */
 import breeze.linalg.{DenseVector=>DV,DenseMatrix=>DM,sum}
-import breeze.numerics.sigmoid
 import org.apache.spark.rdd.RDD
+import breeze.numerics.{atan, tanh, sigmoid}
 
 /**
  * constructor
  * @param num_in number of incoming features
  * @param num_out number of output vector
- * @param eta learning rate, optional
  */
-class FL (val num_in:Int, val num_out:Int, var eta:Double=0.5) extends layer{
+class FL (val num_in:Int, val num_out:Int) extends layer{
   var weight:DM[Double] = DM.fill[Double](num_in, num_out){scala.util.Random.nextDouble()*2-1d}
   var bias: DV[Double] = DV.fill[Double](num_out){scala.util.Random.nextDouble()*2-1d}
   var delta: RDD[DV[Double]] = _
@@ -24,10 +23,9 @@ class FL (val num_in:Int, val num_out:Int, var eta:Double=0.5) extends layer{
   var inputLocal: DV[Double] = _
   var outputLocal: DV[Double] = _
   var deltaLocal: DV[Double] = _
+  var wadj:DM[Double] = DM.fill[Double](num_in,num_out){0d}
+  var badj:DV[Double] = DV.fill[Double](num_out){0d}
 
-  def seteta(e:Double): Unit ={
-    this.eta = e
-  }
   /**
    * override forward function
    * @param in_vec input vector(learned features) in matrix format (to be transformed)
@@ -67,6 +65,7 @@ class FL (val num_in:Int, val num_out:Int, var eta:Double=0.5) extends layer{
   def calErrBeforeFlLocal(nextDelta:DV[Double], nextWeight:DM[Double]): Unit ={
     val sum:DV[Double]= nextWeight*nextDelta
     val o:DV[Double] = outputLocal
+    require(o.length==sum.length)
     deltaLocal = o :* (o:-1d) :* sum :* -1d
   }
 
@@ -92,23 +91,24 @@ class FL (val num_in:Int, val num_out:Int, var eta:Double=0.5) extends layer{
       (adjw,adjb)
     }
     val redadj:(DM[Double],DV[Double]) = adj.reduce{(i,j)=>(i._1:+j._1,i._2+j._2)}
+    wadj = momentum*wadj+redadj._1
+    badj = momentum*badj+redadj._2
+    weight = weight:+wadj
+    bias = bias:+badj
+  }
 
-    weight = weight:+redadj._1
-    bias = bias:+redadj._2
-  }
   override def adjWeightLocal(): Unit ={
-    val adj:DM[Double] = inputLocal*deltaLocal.t:*eta
-    weight = weight:+adj
+    val adjw:DM[Double] = inputLocal*deltaLocal.t:*eta
+    wadj = momentum*wadj+adjw
+    weight = weight:+wdj
     val adjb:DV[Double] = deltaLocal:*eta
-    bias = bias+adjb
+    badj = momentum*badj+adjb
+    bias = bias:+badj
   }
+
   override def clearCache(): Unit ={
     input.unpersist()
     output.unpersist()
     delta.unpersist()
   }
-  override def filterInput(inputFilter:RDD[Int]): Unit = {
-    //only keep wrong results
-    input = input.zip(inputFilter).filter(_._2 == 0).map(_._1)
-    input.coalesce(numPartition,true)  }
 }
