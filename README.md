@@ -2,7 +2,11 @@
 This is a generalised CNN(convolutional neural network) model implemented on Spark-scala. The model is abstracted down to layer models which contains models like CL(Convolutional layer), SL(subsampling layer), FL(fully-connected layer) and OL(Output layer). You can build up your own network architecture according to your need.
 <h5>package structure:</h5>
 <pre>
-./model: successfully trained LeNet5 with 5 iteration training and tested on MNIST dataset. Error rate < 2%<br>
+./report.doc: Project report on detail methodologies and implementations<br>
+./model: successfully trained LeNet5<br>
+----+mlpmodel: trained mlp model<br>
+----+localmodel: trained local model, sigmoid activated, 4 iterations, err<2%<br>
+----+batch50: trained cluster model, use model of 1 round local training, totally 5 iterations, err<3%<br>
 ./src: source code of the package:<br>
 ----+CNNLayer<br>
     ----+layer.scala: generalized layer model with useful LA utilities (with learning rate and momentum)<br>
