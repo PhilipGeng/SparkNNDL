@@ -42,6 +42,7 @@ class CL(val numfm:Int, val dim_conv:Int) extends layer {
     fm_input_map = map
     outputIndex = calcInvIndex(map)
     kernel = fm_input_map.map(arr=>arr.map(fm=>DM.rand[Double](dim_conv,dim_conv):*=2d:-=1d))
+    kadj = fm_input_map.map(arr=>arr.map(fm=>DM.fill[Double](dim_conv,dim_conv){0d}))
   }
 
   /**
@@ -89,7 +90,7 @@ class CL(val numfm:Int, val dim_conv:Int) extends layer {
         val index: Int = ker._2 //index of inputmap
         convolveDM(inputLocal(index),convKernel) //get inputmap and convolve
       }.reduce((x,y)=>x+y)
-      sigmoid(c:+b)
+      activate(c:+b)
     }//end fm
     outputLocal
   }
@@ -110,7 +111,7 @@ class CL(val numfm:Int, val dim_conv:Int) extends layer {
     delta = o.zip(sum).map{elem=> // each rdd
       val e_o:DV[Double] = elem._1
       val e_sum:DV[Double] = elem._2
-      formatOutput(e_o :* (e_o:-1d) :* e_sum :* -1d)
+      formatOutput(act_derivative(e_o) :* e_sum)
     }//end rdd
     delta.cache()
   }
@@ -124,7 +125,7 @@ class CL(val numfm:Int, val dim_conv:Int) extends layer {
     //flatten output Array[DM[Double]] to DV[Double]
     val o:DV[Double] = flattenOutput(outputLocal)
     //calculate delta of this CL based on output value
-    val deltaVector:DV[Double] = o :* (o:-1d) :* sum :* -1d
+    val deltaVector:DV[Double] = act_derivative(o) :* sum
     deltaLocal = formatOutput(deltaVector)
   }
 
@@ -144,7 +145,7 @@ class CL(val numfm:Int, val dim_conv:Int) extends layer {
       arr._1.zip(arr._2).map{item=>
         val d:DM[Double] = item._1
         val o:DM[Double] = item._2
-        o:*(o:-1d):*(-1d):*d
+        act_derivative(o):*d
       }
     }
     delta.cache()
@@ -163,7 +164,7 @@ class CL(val numfm:Int, val dim_conv:Int) extends layer {
     deltaLocal = propErr.zip(outputLocal).map{each=>
       val d = each._1 //delta
       val o = each._2 //output
-      o:*(o:-1d):*(-1d):*d
+      act_derivative(o):*d
     }
   }
 
@@ -191,13 +192,13 @@ class CL(val numfm:Int, val dim_conv:Int) extends layer {
     }
     for(i<-adj.indices){
       val adjw:Array[DM[Double]] = adj(i)._1
-      badj = adj(i)._2*eta+momentum*badj
-      bias(i) = bias(i)+badj
+      badj(i) = adj(i)._2*eta+badj(i)*momentum
+      bias(i) = bias(i)+badj(i)
       for(j<-adjw.indices){
         require(kernel(i)(j).rows == adjw(j).rows)
         require(kernel(i)(j).cols == adjw(j).cols)
-        kadj(i)(j) = adjw(j):*eta+kadj:*momentum
-        kernel(i)(j) = kernel(i)(j) + kadj
+        kadj(i)(j) = (adjw(j):*eta)+(kadj(i)(j):*momentum)
+        kernel(i)(j) = kernel(i)(j) + kadj(i)(j)
       }
     }
   }
@@ -213,16 +214,15 @@ class CL(val numfm:Int, val dim_conv:Int) extends layer {
       val adjw:Array[DM[Double]] = input.map{in=>convolveDM(in,delta)}
       (adjw,adjb)
     }
-
     for(i<-adj.indices){
       val adjw:Array[DM[Double]] = adj(i)._1
-      badj = adj(i)._2*eta+momentum*badj
-      bias(i) = bias(i)+badj
+      badj(i) = adj(i)._2*eta+momentum*badj(i)
+      bias(i) = bias(i)+badj(i)
       for(j<-adjw.indices){
         require(kernel(i)(j).rows == adjw(j).rows)
         require(kernel(i)(j).cols == adjw(j).cols)
-        kadj(i)(j) = adjw(j):*eta+kadj:*momentum
-        kernel(i)(j) = kernel(i)(j) + kadj
+        kadj(i)(j) = (adjw(j):*eta)+(kadj(i)(j):*momentum)
+        kernel(i)(j) = kernel(i)(j) + kadj(i)(j)
       }
     }
   }

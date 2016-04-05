@@ -35,7 +35,7 @@ class FL (val num_in:Int, val num_out:Int) extends layer{
     //transform Array[DM[Double]] => DV[Double]
     input = in_vec.map(flattenOutput(_)).cache()
     //dot product to get output
-    output = input.map { vec=> sigmoid((vec.t * weight).t + bias)}
+    output = input.map { vec=> activate((vec.t * weight).t + bias)}
     //format output DV[Double] => Array[DM[Double]]
     output.cache()
     output.map(formatOutput(_))
@@ -45,7 +45,7 @@ class FL (val num_in:Int, val num_out:Int) extends layer{
       //transform Array[DM[Double]] => DV[Double]
       inputLocal = flattenOutput(in_vec)
       //dot product to get output
-      outputLocal = sigmoid((inputLocal.t * weight).t + bias)
+      outputLocal = activate((inputLocal.t * weight).t + bias)
       //format output DV[Double] => Array[DM[Double]]
       formatOutput(outputLocal)
   }
@@ -59,14 +59,14 @@ class FL (val num_in:Int, val num_out:Int) extends layer{
       val deltaVec:DV[Double] = vec._1
       val outputVec:DV[Double] = vec._2
       val sum:DV[Double] = nextWeight*deltaVec
-      outputVec:*(outputVec:-1d):*sum:*(-1d)
+      act_derivative(outputVec):*sum
     }.cache()
   }
   def calErrBeforeFlLocal(nextDelta:DV[Double], nextWeight:DM[Double]): Unit ={
     val sum:DV[Double]= nextWeight*nextDelta
     val o:DV[Double] = outputLocal
     require(o.length==sum.length)
-    deltaLocal = o :* (o:-1d) :* sum :* -1d
+    deltaLocal = act_derivative(o) :* sum
   }
 
   /**
@@ -90,6 +90,7 @@ class FL (val num_in:Int, val num_out:Int) extends layer{
       val adjb:DV[Double] = d:*eta
       (adjw,adjb)
     }
+
     val redadj:(DM[Double],DV[Double]) = adj.reduce{(i,j)=>(i._1:+j._1,i._2+j._2)}
     wadj = momentum*wadj+redadj._1
     badj = momentum*badj+redadj._2
@@ -100,7 +101,7 @@ class FL (val num_in:Int, val num_out:Int) extends layer{
   override def adjWeightLocal(): Unit ={
     val adjw:DM[Double] = inputLocal*deltaLocal.t:*eta
     wadj = momentum*wadj+adjw
-    weight = weight:+wdj
+    weight = weight:+wadj
     val adjb:DV[Double] = deltaLocal:*eta
     badj = momentum*badj+adjb
     bias = bias:+badj

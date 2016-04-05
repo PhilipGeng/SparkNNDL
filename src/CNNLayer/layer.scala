@@ -6,12 +6,15 @@ package CNNLayer
  * This is the generic layer model contains functions in common
  */
 import breeze.linalg.{DenseMatrix=>DM,DenseVector=>DV,sum}
+import breeze.numerics.{sigmoid,tanh}
 import org.apache.spark.rdd.RDD
 
 abstract class layer extends Serializable {
   /** default values */
   var eta: Double = 0.01
   var momentum: Double = 0.9
+  var actfunc: String = "sigmoid" //enum{sigmoid,relu,tanh}
+
   /**interfaces for cluster mode*/
   var numPartition: Int = 2
   def setNumPartition(par:Int): Unit ={numPartition = par}
@@ -37,14 +40,26 @@ abstract class layer extends Serializable {
 
   /**
    * setter function for learning rate
-   * @param e
    */
   def seteta(e:Double) = {
     this.eta = e
   }
-
+  /**
+   * setter function for momentum
+   */
   def setMomentum(m:Double)={
     this.momentum = m
+  }
+  /**
+   * setter function for activation
+   */
+  def setActivate(s:String): Unit={
+    if(s=="sigmoid"||s=="relu"||s=="tanh"){
+      actfunc = s
+    }
+    else{
+      println("error setting activation function, support: sigmoid/relu/tanh")
+    }
   }
   /**
    * format output for intra-class calculation
@@ -141,4 +156,38 @@ abstract class layer extends Serializable {
     (0 until numOfCol).toArray.map{index=>s.map{arr=>arr(index)}}
   }
 
+  def activate(x:Double): Double ={
+    actfunc match {
+      case "relu"=>Math.max(0d,x)
+      case "tanh"=>tanh(x)
+      case "sigmoid"=>sigmoid(x)
+    }
+  }
+  def activate(x:DM[Double]): DM[Double] ={
+    x.map(a=>activate(a))
+  }
+  def activate(x:DV[Double]): DV[Double] ={
+    x.map(a=>activate(a))
+  }
+  def act_derivative(o:Double): Double ={
+    actfunc match {
+      case "relu"=>if(o>0d) 1d else 0d
+      case "tanh"=>1-o*o
+      case "sigmoid"=>o*(1-o)
+    }
+  }
+  def act_derivative(o:DM[Double]): DM[Double] ={
+    actfunc match {
+      case "relu"=>o.map(x=>if(x>0d) 1d else 0d)
+      case "tanh"=>((o:*o):-1d):*(-1d)
+      case "sigmoid"=>o:*(o:-1d):*(-1d)
+    }
+  }
+  def act_derivative(o:DV[Double]): DV[Double] ={
+    actfunc match {
+      case "relu"=>o.map(x=>if(x>0d) 1d else 0d)
+      case "tanh"=>((o:*o):-1d):*(-1d)
+      case "sigmoid"=>o:*(o:-1d):*(-1d)
+    }
+  }
 }

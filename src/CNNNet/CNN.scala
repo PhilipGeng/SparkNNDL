@@ -138,6 +138,16 @@ class CNN extends Serializable{
     o7.seteta(eta)
   }
 
+  def setMomentum(m:Double): Unit ={
+    c1.setMomentum(m)
+    s2.setMomentum(m)
+    c3.setMomentum(m)
+    s4.setMomentum(m)
+    c5.setMomentum(m)
+    f6.setMomentum(m)
+    o7.setMomentum(m)
+  }
+
   def clearAllCache(): Unit ={
     c1.clearCache()
     s2.clearCache()
@@ -162,5 +172,13 @@ class CNN extends Serializable{
     f6.setNumPartition(numPartition)
     o7.setNumPartition(numPartition)
   }
-
+  def setActivate(s:String): Unit ={
+    c1.setActivate(s)
+    s2.setActivate(s)
+    c3.setActivate(s)
+    s4.setActivate(s)
+    c5.setActivate(s)
+    f6.setActivate(s)
+    o7.setActivate(s)
+  }
 }

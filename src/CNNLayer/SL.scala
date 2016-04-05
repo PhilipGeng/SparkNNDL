@@ -51,7 +51,7 @@ class SL (val numfm: Int, val dim_neighbor:Int) extends layer{
       DM.tabulate(rm_dim,rm_dim){case (i,j)=> //indices in output matrix
         //mean subsampling
         val mean:Double = sum(dm(i*dim_neighbor to (i+1)*dim_neighbor-1,j*dim_neighbor to (j+1)*dim_neighbor-1))/(dim_neighbor*dim_neighbor)
-        sigmoid(mean*w+b)
+        activate(mean*w+b)
       }
     }
     outputLocal
@@ -80,7 +80,7 @@ class SL (val numfm: Int, val dim_neighbor:Int) extends layer{
       arr._1.zip(arr._2).map{Mat=> //zipped matrix
         val d:DM[Double] = Mat._1 //delta
         val o:DM[Double] = Mat._2 //output
-        o:*(o:-1d):*(-1d):*d //calculate as matrix
+        act_derivative(o):*d //calculate as matrix
       }
     }
     delta.cache()
@@ -103,7 +103,7 @@ class SL (val numfm: Int, val dim_neighbor:Int) extends layer{
     deltaLocal = outputLocal.zip(propErr).map{x=>
       val o = x._1
       val d = x._2
-      o:*(o:-1d):*(-1d):*d
+     act_derivative(o):*d
     }
   }
 
@@ -116,7 +116,7 @@ class SL (val numfm: Int, val dim_neighbor:Int) extends layer{
       arr._1.zip(arr._2).map { mat=> //each delta mat zip with input mat
         val d:DM[Double] = mat._1 //delta
         val i:DM[Double] = mat._2 //input
-        val summat:DM[Double] = DM.tabulate(d.rows,d.cols){case(m,n)=>sum(i(dim_neighbor*m to dim_neighbor*(m+1)-1,dim_neighbor*n to dim_neighbor*(n+1)-1))/(dim_neighbor*dim_neighbor)}
+        val summat:DM[Double] = DM.tabulate(d.rows,d.cols){case(m,n)=>sum(i(dim_neighbor*m to dim_neighbor*(m+1)-1,dim_neighbor*n to dim_neighbor*(n+1)-1))}
         val adjw:Double = sum(summat:*d) //weight adjustment
         val adjb:Double = sum(d) //bias adjustment
         (adjw,adjb)
@@ -127,8 +127,11 @@ class SL (val numfm: Int, val dim_neighbor:Int) extends layer{
         (each._1._1+each._2._1,each._1._2+each._2._2) //reduce(sum up) adjustments
       }
     }
-    weight = weight.zip(redadj).map{arr=>arr._1+arr._2._1*eta}
-    bias = bias.zip(redadj).map{arr=>arr._1+arr._2._2*eta}
+    wadj =redadj.zip(wadj).map(x=>(x._1._1*eta)+(x._2*momentum))
+    badj =redadj.zip(badj).map(x=>(x._1._2*eta)+(x._2*momentum))
+
+    weight = weight.zip(wadj).map{arr=>arr._1+arr._2}
+    bias = bias.zip(badj).map{arr=>arr._1+arr._2}
   }
 
   override def adjWeightLocal(): Unit ={
@@ -140,12 +143,12 @@ class SL (val numfm: Int, val dim_neighbor:Int) extends layer{
       for(m<-0 to deltaLocal(i).cols-1){
         for(n<-0 to deltaLocal(i).rows-1){
           val sumin = sum(inputLocal(i)(dim_neighbor*m to dim_neighbor*(m+1)-1,dim_neighbor*n to dim_neighbor*(n+1)-1))
-          adjw_part = adjw_part + sumin*deltaLocal(i)(m,n)
+          adjw_part = adjw_part + (sumin*deltaLocal(i)(m,n))
           adjb_part = adjb_part + deltaLocal(i)(m,n)
         }
       }
-      wadj(i) = adjw_part*eta + wadj(i)*momentum
-      badj(i) = adjb_part*eta + badj(i)*momentum
+      wadj(i) = (adjw_part*eta) + (wadj(i)*momentum)
+      badj(i) = (adjb_part*eta) + (badj(i)*momentum)
       weight(i) = weight(i) + wadj(i)
       bias(i) = bias(i) + badj(i)
     }

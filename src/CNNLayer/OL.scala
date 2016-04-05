@@ -21,11 +21,11 @@ class OL (override val num_in:Int, override val num_out:Int) extends FL(num_in, 
     delta = target.zip(output).map{vec=>
       val t:DV[Double] = vec._1
       val o:DV[Double] = vec._2
-      o:*(o:-1d):*(o-t)
+      act_derivative(o):*(t-o)
     }.cache()
   }
   override def calErrLocal(target: DV[Double]): Unit ={
-    deltaLocal = outputLocal :* (outputLocal :- 1d) :* (outputLocal :- target)
+    deltaLocal = act_derivative(outputLocal) :* (target-outputLocal)
   }
   def loss(output:DV[Double],target:DV[Double]): Double ={
     (target-output).map(x=>x*x).sum*0.5
